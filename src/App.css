@@ -247,20 +247,13 @@ button:disabled {
   width: 100%;
 }
 
-.brand-mark {
-  align-items: center;
-  background: var(--red);
-  border: 2px solid #fff;
-  border-radius: 8px 8px 6px 6px;
-  box-shadow: 0 0 0 4px rgba(247, 25, 70, 0.18);
-  color: #fff;
-  display: inline-flex;
-  font-size: 13px;
-  font-weight: 900;
-  height: 42px;
-  justify-content: center;
-  letter-spacing: 0;
-  width: 58px;
+.brand-logo {
+  display: block;
+  filter: drop-shadow(0 8px 18px rgba(247, 25, 70, 0.22));
+  height: auto;
+  max-height: 58px;
+  object-fit: contain;
+  width: 112px;
 }
 
 .eyebrow {

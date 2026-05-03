@@ -676,7 +676,7 @@ function App() {
     return (
       <main className="auth-shell" dir={isArabic ? 'rtl' : 'ltr'}>
         <section className="auth-card">
-          <div className="brand-mark">B61</div>
+          <img className="brand-logo" src="/brand/boneless61-logo.png" alt="Boneless 61" />
           <div className="language-row">
             <p className="eyebrow">{text.brand}</p>
             <button className="language-button" type="button" onClick={() => setUiLang(isArabic ? 'en' : 'ar')}>
@@ -728,7 +728,7 @@ function App() {
     <main className="app-shell" dir={isArabic ? 'rtl' : 'ltr'}>
       <aside className={`sidebar ${drawerOpen ? 'open' : ''}`}>
         <div className="sidebar-head">
-          <div className="brand-mark">B61</div>
+          <img className="brand-logo" src="/brand/boneless61-logo.png" alt="Boneless 61" />
           <div>
             <p className="eyebrow">{text.brand}</p>
             <strong>{text.backOffice}</strong>

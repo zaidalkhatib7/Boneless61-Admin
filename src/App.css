@@ -230,6 +230,7 @@ button:disabled {
 .auth-shell {
   align-items: center;
   display: grid;
+  justify-items: center;
   min-height: 100vh;
   padding: 24px;
   position: relative;
@@ -243,6 +244,7 @@ button:disabled {
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
   margin: 0 auto;
   max-width: 460px;
+  min-width: 0;
   padding: 34px;
   width: 100%;
 }
@@ -307,6 +309,13 @@ p {
 .record-form {
   display: grid;
   gap: 16px;
+  min-width: 0;
+}
+
+.field-stack {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
 }
 
 label {
@@ -316,6 +325,7 @@ label {
   font-weight: 800;
   gap: 8px;
   letter-spacing: 0;
+  min-width: 0;
   text-transform: uppercase;
 }
 
@@ -348,6 +358,7 @@ textarea:focus {
   align-items: center;
   display: grid;
   grid-template-columns: 1fr auto;
+  min-width: 0;
   position: relative;
 }
 
@@ -930,12 +941,21 @@ td {
 }
 
 @media (max-width: 720px) {
+  .auth-shell {
+    align-items: start;
+    min-height: 100svh;
+    padding: 16px;
+    padding-top: 108px;
+  }
+
   .content {
     padding: 16px;
   }
 
   .auth-card {
+    max-width: none;
     padding: 24px;
+    width: min(100%, calc(100vw - 32px));
   }
 
   .auth-card h1,

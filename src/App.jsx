@@ -699,20 +699,26 @@ function App() {
                 required
               />
             </label>
-            <label>
-              {text.password}
+            <div className="field-stack">
+              <label htmlFor="admin-password">{text.password}</label>
               <span className="password-field">
                 <input
+                  id="admin-password"
                   type={showPassword ? 'text' : 'password'}
                   value={loginValues.password}
                   onChange={(event) => setLoginValues((current) => ({ ...current, password: event.target.value }))}
                   required
                 />
-                <button type="button" className="icon-button" onClick={() => setShowPassword((value) => !value)}>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  onClick={() => setShowPassword((value) => !value)}
+                >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </span>
-            </label>
+            </div>
             {error && <div className="alert error">{error}</div>}
             <button className="primary-action" type="submit" disabled={busy}>
               <ShieldCheck size={18} />
@@ -733,7 +739,7 @@ function App() {
             <p className="eyebrow">{text.brand}</p>
             <strong>{text.backOffice}</strong>
           </div>
-          <button className="icon-button mobile-only" type="button" onClick={() => setDrawerOpen(false)}>
+          <button className="icon-button mobile-only" type="button" aria-label="Close menu" onClick={() => setDrawerOpen(false)}>
             <X size={18} />
           </button>
         </div>
@@ -765,7 +771,7 @@ function App() {
 
       <section className="content">
         <header className="topbar">
-          <button className="icon-button mobile-only" type="button" onClick={() => setDrawerOpen(true)}>
+          <button className="icon-button mobile-only" type="button" aria-label="Open menu" onClick={() => setDrawerOpen(true)}>
             <MenuIcon size={20} />
           </button>
           <div>
@@ -797,7 +803,7 @@ function App() {
         {(error || notice) && (
           <div className={`alert ${error ? 'error' : 'success'}`}>
             {error || notice}
-            <button type="button" onClick={() => (error ? setError('') : setNotice(''))}>
+            <button type="button" aria-label="Dismiss message" onClick={() => (error ? setError('') : setNotice(''))}>
               <X size={16} />
             </button>
           </div>
@@ -1018,7 +1024,7 @@ function FormDrawer({ resource, values, records, editing, busy, onClose, onSubmi
             <p className="eyebrow">{editing ? text.editItem : text.addItem}</p>
             <h2>{resourceTitle(resource.key)}</h2>
           </div>
-          <button className="icon-button" type="button" onClick={onClose}>
+          <button className="icon-button" type="button" aria-label="Close form" onClick={onClose}>
             <X size={18} />
           </button>
         </div>

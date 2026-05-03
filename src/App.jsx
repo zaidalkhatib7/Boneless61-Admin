@@ -63,9 +63,12 @@ const copy = {
     orderActionDone: 'Order status updated',
     orderId: 'Order ID',
     orderIdHelp: 'Paste the order UUID from the order details.',
+    orderIdRequired: 'Enter an order ID to continue.',
     confirmOrder: 'Confirm order',
     sendToDelivery: 'Send to delivery',
     orderStatusNote: 'Use these controls for the admin order status actions added in Sprint 3.',
+    confirmOrderHelp: 'Move an order from Confirmed to Preparing.',
+    sendToDeliveryHelp: 'Move a preparing order to Out for Delivery.',
     actionResult: 'Latest result',
     deleteConfirm: 'Delete',
     select: 'Select',
@@ -176,9 +179,12 @@ const copy = {
     orderActionDone: 'تم تحديث حالة الطلب',
     orderId: 'معرف الطلب',
     orderIdHelp: 'الصق معرف الطلب من تفاصيل الطلب.',
+    orderIdRequired: 'أدخل معرف الطلب للمتابعة.',
     confirmOrder: 'تأكيد الطلب',
     sendToDelivery: 'إرسال للتوصيل',
     orderStatusNote: 'استخدم هذه الأدوات لتحديث حالة الطلب من لوحة الإدارة.',
+    confirmOrderHelp: 'نقل الطلب من مؤكد إلى قيد التحضير.',
+    sendToDeliveryHelp: 'نقل الطلب قيد التحضير إلى خارج للتوصيل.',
     actionResult: 'آخر نتيجة',
     deleteConfirm: 'حذف',
     select: 'اختر',
@@ -440,6 +446,7 @@ function App() {
   const [formValues, setFormValues] = useState({})
   const [orderId, setOrderId] = useState('')
   const [orderActionResult, setOrderActionResult] = useState(null)
+  const [orderFieldError, setOrderFieldError] = useState('')
   const [loginValues, setLoginValues] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
 
@@ -629,11 +636,12 @@ function App() {
   async function runOrderAction(action) {
     const trimmedOrderId = orderId.trim()
     if (!trimmedOrderId) {
-      setError(text.orderIdHelp)
+      setOrderFieldError(text.orderIdRequired)
       return
     }
     setBusy(true)
     setError('')
+    setOrderFieldError('')
     try {
       const payload = await adminFetch(`/api/admin/orders/${encodeURIComponent(trimmedOrderId)}/${action}`, {
         method: 'POST',
@@ -739,6 +747,7 @@ function App() {
             setActiveKey(key)
             setQuery('')
             setOrderActionResult(null)
+            setOrderFieldError('')
             setDrawerOpen(false)
           }}
         />
@@ -794,24 +803,28 @@ function App() {
           </div>
         )}
 
-        <section className="stats-grid">
-          {stats.map((stat) => {
-            const Icon = stat.icon
-            return (
-              <article className="stat-card" key={stat.label}>
-                <Icon size={20} />
-                <span>{stat.label}</span>
-                <strong>{stat.value}</strong>
-              </article>
-            )
-          })}
-        </section>
+        {!isActionPage && (
+          <section className="stats-grid">
+            {stats.map((stat) => {
+              const Icon = stat.icon
+              return (
+                <article className="stat-card" key={stat.label}>
+                  <Icon size={20} />
+                  <span>{stat.label}</span>
+                  <strong>{stat.value}</strong>
+                </article>
+              )
+            })}
+          </section>
+        )}
 
         {isActionPage ? (
           <OrderStatusPanel
             text={text}
             orderId={orderId}
             setOrderId={setOrderId}
+            fieldError={orderFieldError}
+            onClearFieldError={() => setOrderFieldError('')}
             busy={busy}
             result={orderActionResult}
             onConfirm={() => runOrderAction('confirm')}
@@ -938,7 +951,8 @@ function renderCell(record, column, lang, text) {
   return formatValue(value, column, lang)
 }
 
-function OrderStatusPanel({ text, orderId, setOrderId, busy, result, onConfirm, onSendToDelivery }) {
+function OrderStatusPanel({ text, orderId, setOrderId, fieldError, onClearFieldError, busy, result, onConfirm, onSendToDelivery }) {
+  const hasOrderId = orderId.trim().length > 0
   return (
     <section className="resource-panel action-panel">
       <div className="panel-head single">
@@ -950,18 +964,39 @@ function OrderStatusPanel({ text, orderId, setOrderId, busy, result, onConfirm, 
       <div className="order-action-body">
         <label>
           {text.orderId}
-          <input value={orderId} onChange={(event) => setOrderId(event.target.value)} placeholder="c3d4e5f6-a7b8-9012-cdef-345678901234" />
+          <input
+            className={fieldError ? 'field-invalid' : ''}
+            value={orderId}
+            onChange={(event) => {
+              setOrderId(event.target.value)
+              if (fieldError) onClearFieldError()
+            }}
+            placeholder="c3d4e5f6-a7b8-9012-cdef-345678901234"
+          />
         </label>
-        <p className="helper-text">{text.orderStatusNote}</p>
-        <div className="order-action-buttons">
-          <button className="primary-action" type="button" onClick={onConfirm} disabled={busy}>
-            <PackageCheck size={18} />
-            {text.confirmOrder}
-          </button>
-          <button className="ghost-action" type="button" onClick={onSendToDelivery} disabled={busy}>
-            <RefreshCw size={18} />
-            {text.sendToDelivery}
-          </button>
+        {fieldError && <p className="field-error">{fieldError}</p>}
+        <p className="helper-text">{text.orderIdHelp}</p>
+        <div className="order-action-grid">
+          <article className="order-action-card">
+            <div>
+              <h3>{text.confirmOrder}</h3>
+              <p>{text.confirmOrderHelp}</p>
+            </div>
+            <button className="primary-action" type="button" onClick={onConfirm} disabled={busy || !hasOrderId}>
+              <PackageCheck size={18} />
+              {text.confirmOrder}
+            </button>
+          </article>
+          <article className="order-action-card">
+            <div>
+              <h3>{text.sendToDelivery}</h3>
+              <p>{text.sendToDeliveryHelp}</p>
+            </div>
+            <button className="ghost-action" type="button" onClick={onSendToDelivery} disabled={busy || !hasOrderId}>
+              <RefreshCw size={18} />
+              {text.sendToDelivery}
+            </button>
+          </article>
         </div>
         {result && (
           <div className="result-box">

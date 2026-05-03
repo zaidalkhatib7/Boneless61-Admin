@@ -618,16 +618,46 @@ textarea:focus {
   padding: 18px;
 }
 
+.field-invalid {
+  border-color: var(--red);
+}
+
+.field-error {
+  color: #ffc7d2;
+  font-size: 13px;
+  margin: -8px 0 0;
+}
+
 .helper-text {
   color: var(--muted);
   line-height: 1.5;
   margin: 0;
 }
 
-.order-action-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+.order-action-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.order-action-card {
+  background: rgba(32, 32, 32, 0.72);
+  border: 1px solid #303030;
+  border-radius: 8px;
+  display: grid;
+  gap: 18px;
+  padding: 16px;
+}
+
+.order-action-card h3 {
+  font-size: 18px;
+  margin: 0 0 8px;
+}
+
+.order-action-card p {
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
 }
 
 .result-box {
@@ -898,6 +928,10 @@ td {
   }
 
   .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .order-action-grid {
     grid-template-columns: 1fr;
   }
 }

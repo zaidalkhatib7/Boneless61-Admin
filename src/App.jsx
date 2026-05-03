@@ -25,7 +25,6 @@ import './App.css'
 
 const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://207.180.254.216'
 const ADMIN_TOKEN_KEY = 'boneless61_admin_token'
-const BASE_URL_KEY = 'boneless61_api_base_url'
 const UI_LANG_KEY = 'boneless61_ui_language'
 
 const copy = {
@@ -34,7 +33,6 @@ const copy = {
     backOffice: 'Back Office',
     signInTitle: 'Back office sign in',
     signInCopy: 'Manage branches, menu items, options, and offers.',
-    serverAddress: 'Server address',
     email: 'Email',
     password: 'Password',
     signIn: 'Sign in',
@@ -150,7 +148,6 @@ const copy = {
     backOffice: 'لوحة الإدارة',
     signInTitle: 'تسجيل دخول الإدارة',
     signInCopy: 'إدارة الفروع، عناصر القائمة، الخيارات، والعروض.',
-    serverAddress: 'عنوان الخادم',
     email: 'البريد الإلكتروني',
     password: 'كلمة المرور',
     signIn: 'تسجيل الدخول',
@@ -429,7 +426,6 @@ function makeInitialForm(config, item = null) {
 }
 
 function App() {
-  const [baseUrl, setBaseUrl] = useState(() => localStorage.getItem(BASE_URL_KEY) || DEFAULT_BASE_URL)
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem(ADMIN_TOKEN_KEY) || '')
   const [uiLang, setUiLang] = useState(() => localStorage.getItem(UI_LANG_KEY) || 'en')
   const [admin, setAdmin] = useState(null)
@@ -467,7 +463,7 @@ function App() {
 
   const request = useCallback(
     async (path, token, options = {}) => {
-      const response = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
+      const response = await fetch(`${DEFAULT_BASE_URL.replace(/\/$/, '')}${path}`, {
         ...options,
         headers: {
           Accept: 'application/json',
@@ -486,7 +482,7 @@ function App() {
       }
       return payload
     },
-    [baseUrl],
+    [],
   )
 
   const adminFetch = useCallback((path, options = {}) => request(path, adminToken, options), [adminToken, request])
@@ -518,10 +514,6 @@ function App() {
       setLoading(false)
     }
   }, [adminFetch, adminToken, loadAdminResource, text.updated])
-
-  useEffect(() => {
-    localStorage.setItem(BASE_URL_KEY, baseUrl)
-  }, [baseUrl])
 
   useEffect(() => {
     localStorage.setItem(UI_LANG_KEY, uiLang)
@@ -686,10 +678,6 @@ function App() {
           <h1>{text.signInTitle}</h1>
           <p className="auth-copy">{text.signInCopy}</p>
           <form className="auth-form" onSubmit={login}>
-            <label>
-              {text.serverAddress}
-              <input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} />
-            </label>
             <label>
               {text.email}
               <input

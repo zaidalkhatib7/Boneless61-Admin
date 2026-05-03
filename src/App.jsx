@@ -10,6 +10,7 @@ import {
   Layers3,
   LogOut,
   Menu as MenuIcon,
+  PackageCheck,
   Plus,
   RefreshCw,
   Save,
@@ -59,6 +60,13 @@ const copy = {
     changesSaved: 'Changes saved',
     itemAdded: 'Item added',
     itemDeleted: 'Item deleted',
+    orderActionDone: 'Order status updated',
+    orderId: 'Order ID',
+    orderIdHelp: 'Paste the order UUID from the order details.',
+    confirmOrder: 'Confirm order',
+    sendToDelivery: 'Send to delivery',
+    orderStatusNote: 'Use these controls for the admin order status actions added in Sprint 3.',
+    actionResult: 'Latest result',
     deleteConfirm: 'Delete',
     select: 'Select',
     statsBranches: 'Branches',
@@ -73,6 +81,7 @@ const copy = {
       optionGroups: ['Option Groups', 'Required sauce choices and add-on groups'],
       options: ['Options', 'Sauces, dips, upgrades and paid extras'],
       offers: ['Offers', 'Promo codes, BOGO deals and date windows'],
+      orderStatus: ['Order Status', 'Confirm active orders and send preparing orders to delivery'],
     },
     columns: {
       name: 'Name',
@@ -164,6 +173,13 @@ const copy = {
     changesSaved: 'تم حفظ التغييرات',
     itemAdded: 'تمت إضافة العنصر',
     itemDeleted: 'تم حذف العنصر',
+    orderActionDone: 'تم تحديث حالة الطلب',
+    orderId: 'معرف الطلب',
+    orderIdHelp: 'الصق معرف الطلب من تفاصيل الطلب.',
+    confirmOrder: 'تأكيد الطلب',
+    sendToDelivery: 'إرسال للتوصيل',
+    orderStatusNote: 'استخدم هذه الأدوات لتحديث حالة الطلب من لوحة الإدارة.',
+    actionResult: 'آخر نتيجة',
     deleteConfirm: 'حذف',
     select: 'اختر',
     statsBranches: 'الفروع',
@@ -178,6 +194,7 @@ const copy = {
       optionGroups: ['مجموعات الخيارات', 'اختيارات الصوص والإضافات المطلوبة'],
       options: ['الخيارات', 'الصوصات والإضافات والترقيات المدفوعة'],
       offers: ['العروض', 'أكواد الخصم وعروض بوجو وفترات العرض'],
+      orderStatus: ['حالة الطلب', 'تأكيد الطلبات النشطة وإرسال الطلبات قيد التحضير للتوصيل'],
     },
     columns: {
       name: 'الاسم',
@@ -347,6 +364,15 @@ const adminResources = [
   },
 ]
 
+const adminActionPages = [
+  {
+    key: 'orderStatus',
+    icon: PackageCheck,
+  },
+]
+
+const adminNavItems = [...adminResources, ...adminActionPages]
+
 function normalizeList(payload) {
   if (Array.isArray(payload)) return payload
   if (Array.isArray(payload?.data)) return payload.data
@@ -412,6 +438,8 @@ function App() {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [formValues, setFormValues] = useState({})
+  const [orderId, setOrderId] = useState('')
+  const [orderActionResult, setOrderActionResult] = useState(null)
   const [loginValues, setLoginValues] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
 
@@ -419,7 +447,12 @@ function App() {
     () => adminResources.find((resource) => resource.key === activeKey),
     [activeKey],
   )
-  const activeConfig = activeAdminResource || adminResources[0]
+  const activeActionPage = useMemo(
+    () => adminActionPages.find((page) => page.key === activeKey),
+    [activeKey],
+  )
+  const activeConfig = activeAdminResource || activeActionPage || adminResources[0]
+  const isActionPage = Boolean(activeActionPage)
   const text = copy[uiLang]
   const isArabic = uiLang === 'ar'
   const resourceTitle = useCallback((key) => text.resources[key]?.[0] || key, [text])
@@ -593,6 +626,27 @@ function App() {
     }
   }
 
+  async function runOrderAction(action) {
+    const trimmedOrderId = orderId.trim()
+    if (!trimmedOrderId) {
+      setError(text.orderIdHelp)
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const payload = await adminFetch(`/api/admin/orders/${encodeURIComponent(trimmedOrderId)}/${action}`, {
+        method: 'POST',
+      })
+      setOrderActionResult(payload)
+      setNotice(text.orderActionDone)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const activeRecords = useMemo(() => {
     const list = records[activeConfig.key] || []
     const needle = query.trim().toLowerCase()
@@ -677,13 +731,14 @@ function App() {
         </div>
         <NavGroup
           title={text.manage}
-          items={adminResources}
+          items={adminNavItems}
           text={text}
           resourceTitle={resourceTitle}
           activeKey={activeKey}
           onSelect={(key) => {
             setActiveKey(key)
             setQuery('')
+            setOrderActionResult(null)
             setDrawerOpen(false)
           }}
         />
@@ -721,10 +776,12 @@ function App() {
               <RefreshCw size={17} />
               {text.sync}
             </button>
-            <button className="primary-action" type="button" onClick={openCreate}>
-              <Plus size={18} />
-              {text.add}
-            </button>
+            {!isActionPage && (
+              <button className="primary-action" type="button" onClick={openCreate}>
+                <Plus size={18} />
+                {text.add}
+              </button>
+            )}
           </div>
         </header>
 
@@ -750,27 +807,39 @@ function App() {
           })}
         </section>
 
-        <section className="resource-panel">
-          <div className="panel-head">
-            <div>
-              <p className="eyebrow">{resourceDescription(activeConfig.key)}</p>
-              <h2>{activeRecords.length} {text.items}</h2>
-            </div>
-            <label className="search-box">
-              <Search size={17} />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={text.search} />
-            </label>
-          </div>
-          <ResourceTable
-            columns={activeConfig.columns}
-            records={activeRecords}
-            loading={loading}
+        {isActionPage ? (
+          <OrderStatusPanel
             text={text}
-            lang={uiLang}
-            onEdit={openEdit}
-            onDelete={deleteRecord}
+            orderId={orderId}
+            setOrderId={setOrderId}
+            busy={busy}
+            result={orderActionResult}
+            onConfirm={() => runOrderAction('confirm')}
+            onSendToDelivery={() => runOrderAction('send-to-delivery')}
           />
-        </section>
+        ) : (
+          <section className="resource-panel">
+            <div className="panel-head">
+              <div>
+                <p className="eyebrow">{resourceDescription(activeConfig.key)}</p>
+                <h2>{activeRecords.length} {text.items}</h2>
+              </div>
+              <label className="search-box">
+                <Search size={17} />
+                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={text.search} />
+              </label>
+            </div>
+            <ResourceTable
+              columns={activeConfig.columns}
+              records={activeRecords}
+              loading={loading}
+              text={text}
+              lang={uiLang}
+              onEdit={openEdit}
+              onDelete={deleteRecord}
+            />
+          </section>
+        )}
       </section>
 
       {formOpen && (
@@ -867,6 +936,42 @@ function renderCell(record, column, lang, text) {
   if (column === 'earning_rate') return `${record.earning_rate?.points_per_syp || '-'} SYP / point`
   if (typeof value === 'boolean') return <span className={`status ${value ? 'on' : 'off'}`}>{value ? text.active : text.off}</span>
   return formatValue(value, column, lang)
+}
+
+function OrderStatusPanel({ text, orderId, setOrderId, busy, result, onConfirm, onSendToDelivery }) {
+  return (
+    <section className="resource-panel action-panel">
+      <div className="panel-head single">
+        <div>
+          <p className="eyebrow">{text.resources.orderStatus[1]}</p>
+          <h2>{text.resources.orderStatus[0]}</h2>
+        </div>
+      </div>
+      <div className="order-action-body">
+        <label>
+          {text.orderId}
+          <input value={orderId} onChange={(event) => setOrderId(event.target.value)} placeholder="c3d4e5f6-a7b8-9012-cdef-345678901234" />
+        </label>
+        <p className="helper-text">{text.orderStatusNote}</p>
+        <div className="order-action-buttons">
+          <button className="primary-action" type="button" onClick={onConfirm} disabled={busy}>
+            <PackageCheck size={18} />
+            {text.confirmOrder}
+          </button>
+          <button className="ghost-action" type="button" onClick={onSendToDelivery} disabled={busy}>
+            <RefreshCw size={18} />
+            {text.sendToDelivery}
+          </button>
+        </div>
+        {result && (
+          <div className="result-box">
+            <p className="eyebrow">{text.actionResult}</p>
+            <pre>{JSON.stringify(result, null, 2)}</pre>
+          </div>
+        )}
+      </div>
+    </section>
+  )
 }
 
 function FormDrawer({ resource, values, records, editing, busy, onClose, onSubmit, onChange, text, resourceTitle }) {

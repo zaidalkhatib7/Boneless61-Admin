@@ -421,8 +421,13 @@ function getOrderCustomer(order) {
   return (
     order?.customer?.full_name ||
     order?.customer?.name ||
+    order?.customer_name ||
     order?.user?.full_name ||
     order?.user?.name ||
+    order?.user_name ||
+    order?.delivery_address?.recipient_name ||
+    order?.address?.recipient_name ||
+    order?.address?.name ||
     order?.recipient_name ||
     order?.full_name ||
     '-'
@@ -430,7 +435,16 @@ function getOrderCustomer(order) {
 }
 
 function getOrderPhone(order) {
-  return order?.customer?.phone || order?.user?.phone || order?.phone || order?.recipient_phone || '-'
+  return (
+    order?.customer?.phone ||
+    order?.customer_phone ||
+    order?.user?.phone ||
+    order?.delivery_address?.phone ||
+    order?.address?.phone ||
+    order?.phone ||
+    order?.recipient_phone ||
+    '-'
+  )
 }
 
 function getOrderTotal(order) {
@@ -1045,7 +1059,7 @@ function OrderStatusPanel({ text, orders, loading, busy, query, setQuery, onConf
 
 function OrderCard({ order, text, busy, onConfirm, onSendToDelivery }) {
   const status = getOrderStatus(order)
-  const canConfirm = status === 'CONFIRMED'
+  const canConfirm = status === 'PENDING' || status === 'CONFIRMED'
   const canSendToDelivery = status === 'PREPARING'
   const total = getOrderTotal(order)
   const placedAt = getOrderPlacedAt(order)
@@ -1057,7 +1071,9 @@ function OrderCard({ order, text, busy, onConfirm, onSendToDelivery }) {
           <p className="eyebrow">{text.orderStatusNote}</p>
           <h3>{getOrderNumber(order)}</h3>
         </div>
-        <span className={`status order-status ${status ? 'on' : 'off'}`}>{status || '-'}</span>
+        <span className={`status order-status ${status === 'PENDING' ? 'pending' : status ? 'on' : 'off'}`}>
+          {status || '-'}
+        </span>
       </div>
       <dl className="order-meta">
         <div>

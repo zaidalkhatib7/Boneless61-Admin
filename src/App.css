@@ -872,6 +872,11 @@ td {
   color: #9effc2;
 }
 
+.status.pending {
+  background: rgba(245, 185, 66, 0.16);
+  color: #ffd36f;
+}
+
 .status.off {
   background: rgba(255, 255, 255, 0.08);
   color: #bdbdbd;

@@ -59,15 +59,18 @@ const copy = {
     itemAdded: 'Item added',
     itemDeleted: 'Item deleted',
     orderActionDone: 'Order status updated',
-    orderId: 'Order ID',
-    orderIdHelp: 'Paste the order UUID from the order details.',
-    orderIdRequired: 'Enter an order ID to continue.',
+    ordersLoadFailed: 'Orders could not be loaded from the admin API.',
+    noOrders: 'No orders found.',
+    customer: 'Customer',
+    phone: 'Phone',
+    total: 'Total',
+    status: 'Status',
+    placedAt: 'Placed at',
     confirmOrder: 'Confirm order',
     sendToDelivery: 'Send to delivery',
-    orderStatusNote: 'Use these controls for the admin order status actions added in Sprint 3.',
+    orderStatusNote: 'Live order queue from the admin API.',
     confirmOrderHelp: 'Move an order from Confirmed to Preparing.',
     sendToDeliveryHelp: 'Move a preparing order to Out for Delivery.',
-    actionResult: 'Latest result',
     deleteConfirm: 'Delete',
     select: 'Select',
     statsBranches: 'Branches',
@@ -82,7 +85,7 @@ const copy = {
       optionGroups: ['Option Groups', 'Required sauce choices and add-on groups'],
       options: ['Options', 'Sauces, dips, upgrades and paid extras'],
       offers: ['Offers', 'Promo codes, BOGO deals and date windows'],
-      orderStatus: ['Order Status', 'Confirm active orders and send preparing orders to delivery'],
+      orderStatus: ['Order Status', 'Review orders and update their preparation state'],
     },
     columns: {
       name: 'Name',
@@ -174,15 +177,18 @@ const copy = {
     itemAdded: 'تمت إضافة العنصر',
     itemDeleted: 'تم حذف العنصر',
     orderActionDone: 'تم تحديث حالة الطلب',
-    orderId: 'معرف الطلب',
-    orderIdHelp: 'الصق معرف الطلب من تفاصيل الطلب.',
-    orderIdRequired: 'أدخل معرف الطلب للمتابعة.',
+    ordersLoadFailed: 'تعذر تحميل الطلبات من واجهة الإدارة.',
+    noOrders: 'لا توجد طلبات.',
+    customer: 'العميل',
+    phone: 'الهاتف',
+    total: 'الإجمالي',
+    status: 'الحالة',
+    placedAt: 'وقت الطلب',
     confirmOrder: 'تأكيد الطلب',
     sendToDelivery: 'إرسال للتوصيل',
-    orderStatusNote: 'استخدم هذه الأدوات لتحديث حالة الطلب من لوحة الإدارة.',
+    orderStatusNote: 'قائمة الطلبات المباشرة من واجهة الإدارة.',
     confirmOrderHelp: 'نقل الطلب من مؤكد إلى قيد التحضير.',
     sendToDeliveryHelp: 'نقل الطلب قيد التحضير إلى خارج للتوصيل.',
-    actionResult: 'آخر نتيجة',
     deleteConfirm: 'حذف',
     select: 'اختر',
     statsBranches: 'الفروع',
@@ -197,7 +203,7 @@ const copy = {
       optionGroups: ['مجموعات الخيارات', 'اختيارات الصوص والإضافات المطلوبة'],
       options: ['الخيارات', 'الصوصات والإضافات والترقيات المدفوعة'],
       offers: ['العروض', 'أكواد الخصم وعروض بوجو وفترات العرض'],
-      orderStatus: ['حالة الطلب', 'تأكيد الطلبات النشطة وإرسال الطلبات قيد التحضير للتوصيل'],
+      orderStatus: ['حالة الطلب', 'مراجعة الطلبات وتحديث حالة التحضير'],
     },
     columns: {
       name: 'الاسم',
@@ -380,6 +386,8 @@ function normalizeList(payload) {
   if (Array.isArray(payload)) return payload
   if (Array.isArray(payload?.data)) return payload.data
   if (Array.isArray(payload?.data?.data)) return payload.data.data
+  if (Array.isArray(payload?.orders)) return payload.orders
+  if (Array.isArray(payload?.orders?.data)) return payload.orders.data
   return []
 }
 
@@ -387,10 +395,50 @@ function unwrapItem(payload, idLabel) {
   return payload?.[idLabel] || payload?.data || payload
 }
 
+function unwrapOrder(payload) {
+  return payload?.order || payload?.data?.order || payload?.data || payload
+}
+
 function buildApiUrl(path) {
   const base = DEFAULT_BASE_URL.replace(/\/+$/, '')
   const normalizedPath = base.endsWith('/api') && path.startsWith('/api/') ? path.slice(4) : path
   return `${base}${normalizedPath.startsWith('/') ? '' : '/'}${normalizedPath}`
+}
+
+function getOrderId(order) {
+  return order?.id || order?.uuid || order?.order_id
+}
+
+function getOrderNumber(order) {
+  return order?.order_number || order?.number || order?.reference || getOrderId(order) || '-'
+}
+
+function getOrderStatus(order) {
+  return String(order?.status || order?.order_status || '').toUpperCase()
+}
+
+function getOrderCustomer(order) {
+  return (
+    order?.customer?.full_name ||
+    order?.customer?.name ||
+    order?.user?.full_name ||
+    order?.user?.name ||
+    order?.recipient_name ||
+    order?.full_name ||
+    '-'
+  )
+}
+
+function getOrderPhone(order) {
+  return order?.customer?.phone || order?.user?.phone || order?.phone || order?.recipient_phone || '-'
+}
+
+function getOrderTotal(order) {
+  return order?.total_syp || order?.total || order?.grand_total_syp || order?.amount_syp || order?.amount
+}
+
+function getOrderPlacedAt(order) {
+  return order?.created_at || order?.placed_at || order?.ordered_at || order?.updated_at
 }
 
 function formatValue(value, column = '', lang = 'en') {
@@ -446,9 +494,6 @@ function App() {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [formValues, setFormValues] = useState({})
-  const [orderId, setOrderId] = useState('')
-  const [orderActionResult, setOrderActionResult] = useState(null)
-  const [orderFieldError, setOrderFieldError] = useState('')
   const [loginValues, setLoginValues] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
 
@@ -492,6 +537,14 @@ function App() {
   )
 
   const adminFetch = useCallback((path, options = {}) => request(path, adminToken, options), [adminToken, request])
+  const loadOrders = useCallback(
+    async (options = {}) => {
+      const payload = await adminFetch('/api/admin/orders')
+      setRecords((current) => ({ ...current, orderStatus: normalizeList(payload) }))
+      if (!options.silent) setNotice(`${resourceTitle('orderStatus')} ${uiLang === 'ar' ? 'تم تحديثه' : 'updated'}`)
+    },
+    [adminFetch, resourceTitle, uiLang],
+  )
   const loadAdminResource = useCallback(
     async (resource, options = {}) => {
       const payload = await adminFetch(resource.endpoint)
@@ -509,6 +562,12 @@ function App() {
       const me = await adminFetch('/api/admin/auth/me')
       setAdmin(me.admin_user)
       await Promise.all(adminResources.map((resource) => loadAdminResource(resource, { silent: true })))
+      try {
+        await loadOrders({ silent: true })
+      } catch (orderError) {
+        setRecords((current) => ({ ...current, orderStatus: [] }))
+        setError(`${text.ordersLoadFailed} ${orderError.message}`)
+      }
       setNotice(text.updated)
     } catch (err) {
       setError(err.message)
@@ -519,7 +578,7 @@ function App() {
     } finally {
       setLoading(false)
     }
-  }, [adminFetch, adminToken, loadAdminResource, text.updated])
+  }, [adminFetch, adminToken, loadAdminResource, loadOrders, text.ordersLoadFailed, text.updated])
 
   useEffect(() => {
     localStorage.setItem(UI_LANG_KEY, uiLang)
@@ -631,21 +690,25 @@ function App() {
     }
   }
 
-  async function runOrderAction(action) {
-    const trimmedOrderId = orderId.trim()
-    if (!trimmedOrderId) {
-      setOrderFieldError(text.orderIdRequired)
-      return
-    }
+  async function runOrderAction(order, action) {
+    const orderId = getOrderId(order)
+    if (!orderId) return
     setBusy(true)
     setError('')
-    setOrderFieldError('')
     try {
-      const payload = await adminFetch(`/api/admin/orders/${encodeURIComponent(trimmedOrderId)}/${action}`, {
+      const payload = await adminFetch(`/api/admin/orders/${encodeURIComponent(orderId)}/${action}`, {
         method: 'POST',
       })
-      setOrderActionResult(payload)
+      const updatedOrder = unwrapOrder(payload)
+      const nextStatus = action === 'confirm' ? 'PREPARING' : 'OUT_FOR_DELIVERY'
+      setRecords((current) => ({
+        ...current,
+        orderStatus: (current.orderStatus || []).map((item) =>
+          getOrderId(item) === orderId ? { ...item, ...updatedOrder, status: updatedOrder?.status || nextStatus } : item,
+        ),
+      }))
       setNotice(text.orderActionDone)
+      await loadOrders({ silent: true })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -746,8 +809,6 @@ function App() {
           onSelect={(key) => {
             setActiveKey(key)
             setQuery('')
-            setOrderActionResult(null)
-            setOrderFieldError('')
             setDrawerOpen(false)
           }}
         />
@@ -821,14 +882,13 @@ function App() {
         {isActionPage ? (
           <OrderStatusPanel
             text={text}
-            orderId={orderId}
-            setOrderId={setOrderId}
-            fieldError={orderFieldError}
-            onClearFieldError={() => setOrderFieldError('')}
+            orders={activeRecords}
+            loading={loading}
             busy={busy}
-            result={orderActionResult}
-            onConfirm={() => runOrderAction('confirm')}
-            onSendToDelivery={() => runOrderAction('send-to-delivery')}
+            query={query}
+            setQuery={setQuery}
+            onConfirm={(order) => runOrderAction(order, 'confirm')}
+            onSendToDelivery={(order) => runOrderAction(order, 'send-to-delivery')}
           />
         ) : (
           <section className="resource-panel">
@@ -951,61 +1011,83 @@ function renderCell(record, column, lang, text) {
   return formatValue(value, column, lang)
 }
 
-function OrderStatusPanel({ text, orderId, setOrderId, fieldError, onClearFieldError, busy, result, onConfirm, onSendToDelivery }) {
-  const hasOrderId = orderId.trim().length > 0
+function OrderStatusPanel({ text, orders, loading, busy, query, setQuery, onConfirm, onSendToDelivery }) {
   return (
-    <section className="resource-panel action-panel">
-      <div className="panel-head single">
+    <section className="resource-panel orders-panel">
+      <div className="panel-head">
         <div>
           <p className="eyebrow">{text.resources.orderStatus[1]}</p>
           <h2>{text.resources.orderStatus[0]}</h2>
         </div>
-      </div>
-      <div className="order-action-body">
-        <label>
-          {text.orderId}
-          <input
-            className={fieldError ? 'field-invalid' : ''}
-            value={orderId}
-            onChange={(event) => {
-              setOrderId(event.target.value)
-              if (fieldError) onClearFieldError()
-            }}
-            placeholder="c3d4e5f6-a7b8-9012-cdef-345678901234"
-          />
+        <label className="search-box">
+          <Search size={17} />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={text.search} />
         </label>
-        {fieldError && <p className="field-error">{fieldError}</p>}
-        <p className="helper-text">{text.orderIdHelp}</p>
-        <div className="order-action-grid">
-          <article className="order-action-card">
-            <div>
-              <h3>{text.confirmOrder}</h3>
-              <p>{text.confirmOrderHelp}</p>
-            </div>
-            <button className="primary-action" type="button" onClick={onConfirm} disabled={busy || !hasOrderId}>
-              <PackageCheck size={18} />
-              {text.confirmOrder}
-            </button>
-          </article>
-          <article className="order-action-card">
-            <div>
-              <h3>{text.sendToDelivery}</h3>
-              <p>{text.sendToDeliveryHelp}</p>
-            </div>
-            <button className="ghost-action" type="button" onClick={onSendToDelivery} disabled={busy || !hasOrderId}>
-              <RefreshCw size={18} />
-              {text.sendToDelivery}
-            </button>
-          </article>
-        </div>
-        {result && (
-          <div className="result-box">
-            <p className="eyebrow">{text.actionResult}</p>
-            <pre>{JSON.stringify(result, null, 2)}</pre>
-          </div>
-        )}
+      </div>
+      <div className="orders-list">
+        {loading && <div className="empty-state">{text.loading}</div>}
+        {!loading && !orders.length && <div className="empty-state">{text.noOrders}</div>}
+        {!loading &&
+          orders.map((order, index) => (
+            <OrderCard
+              key={getOrderId(order) || getOrderNumber(order) || index}
+              order={order}
+              text={text}
+              busy={busy}
+              onConfirm={onConfirm}
+              onSendToDelivery={onSendToDelivery}
+            />
+          ))}
       </div>
     </section>
+  )
+}
+
+function OrderCard({ order, text, busy, onConfirm, onSendToDelivery }) {
+  const status = getOrderStatus(order)
+  const canConfirm = status === 'CONFIRMED'
+  const canSendToDelivery = status === 'PREPARING'
+  const total = getOrderTotal(order)
+  const placedAt = getOrderPlacedAt(order)
+
+  return (
+    <article className="order-card">
+      <div className="order-card-main">
+        <div>
+          <p className="eyebrow">{text.orderStatusNote}</p>
+          <h3>{getOrderNumber(order)}</h3>
+        </div>
+        <span className={`status order-status ${status ? 'on' : 'off'}`}>{status || '-'}</span>
+      </div>
+      <dl className="order-meta">
+        <div>
+          <dt>{text.customer}</dt>
+          <dd>{getOrderCustomer(order)}</dd>
+        </div>
+        <div>
+          <dt>{text.phone}</dt>
+          <dd>{getOrderPhone(order)}</dd>
+        </div>
+        <div>
+          <dt>{text.total}</dt>
+          <dd>{total ? formatValue(total, 'total_syp') : '-'}</dd>
+        </div>
+        <div>
+          <dt>{text.placedAt}</dt>
+          <dd>{placedAt ? new Date(placedAt).toLocaleString() : '-'}</dd>
+        </div>
+      </dl>
+      <div className="order-card-actions">
+        <button className="primary-action" type="button" onClick={() => onConfirm(order)} disabled={busy || !canConfirm}>
+          <PackageCheck size={18} />
+          {text.confirmOrder}
+        </button>
+        <button className="ghost-action" type="button" onClick={() => onSendToDelivery(order)} disabled={busy || !canSendToDelivery}>
+          <RefreshCw size={18} />
+          {text.sendToDelivery}
+        </button>
+      </div>
+    </article>
   )
 }
 

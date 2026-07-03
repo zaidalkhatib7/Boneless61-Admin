@@ -68,6 +68,9 @@ const copy = {
     placedAt: 'Placed at',
     confirmOrder: 'Confirm order',
     sendToDelivery: 'Send to delivery',
+    markDelivered: 'Mark delivered',
+    cancelOrder: 'Cancel order',
+    noOrderActions: 'No available actions',
     orderStatusNote: 'Live order queue from the admin API.',
     confirmOrderHelp: 'Move an order from Confirmed to Preparing.',
     sendToDeliveryHelp: 'Move a preparing order to Out for Delivery.',
@@ -186,6 +189,9 @@ const copy = {
     placedAt: 'وقت الطلب',
     confirmOrder: 'تأكيد الطلب',
     sendToDelivery: 'إرسال للتوصيل',
+    markDelivered: 'تم التوصيل',
+    cancelOrder: 'إلغاء الطلب',
+    noOrderActions: 'لا توجد إجراءات متاحة',
     orderStatusNote: 'قائمة الطلبات المباشرة من واجهة الإدارة.',
     confirmOrderHelp: 'نقل الطلب من مؤكد إلى قيد التحضير.',
     sendToDeliveryHelp: 'نقل الطلب قيد التحضير إلى خارج للتوصيل.',
@@ -382,6 +388,25 @@ const adminActionPages = [
 
 const adminNavItems = [...adminResources, ...adminActionPages]
 
+const orderActionConfig = {
+  confirm: {
+    endpoints: ['confirm'],
+    nextStatus: 'PREPARING',
+  },
+  sendToDelivery: {
+    endpoints: ['send-to-delivery', 'out-for-delivery'],
+    nextStatus: 'OUT_FOR_DELIVERY',
+  },
+  markDelivered: {
+    endpoints: ['delivered', 'deliver', 'mark-delivered', 'complete'],
+    nextStatus: 'DELIVERED',
+  },
+  cancel: {
+    endpoints: ['cancel', 'cancelled'],
+    nextStatus: 'CANCELLED',
+  },
+}
+
 function normalizeList(payload) {
   if (Array.isArray(payload)) return payload
   if (Array.isArray(payload?.data)) return payload.data
@@ -405,6 +430,18 @@ function buildApiUrl(path) {
   return `${base}${normalizedPath.startsWith('/') ? '' : '/'}${normalizedPath}`
 }
 
+function readPath(source, path) {
+  return path.split('.').reduce((value, key) => value?.[key], source)
+}
+
+function firstValue(source, paths) {
+  for (const path of paths) {
+    const value = readPath(source, path)
+    if (value !== null && value !== undefined && value !== '') return value
+  }
+  return ''
+}
+
 function getOrderId(order) {
   return order?.id || order?.uuid || order?.order_id
 }
@@ -418,33 +455,54 @@ function getOrderStatus(order) {
 }
 
 function getOrderCustomer(order) {
-  return (
-    order?.customer?.full_name ||
-    order?.customer?.name ||
-    order?.customer_name ||
-    order?.user?.full_name ||
-    order?.user?.name ||
-    order?.user_name ||
-    order?.delivery_address?.recipient_name ||
-    order?.address?.recipient_name ||
-    order?.address?.name ||
-    order?.recipient_name ||
-    order?.full_name ||
-    '-'
-  )
+  return firstValue(order, [
+    'customer.full_name',
+    'customer.name',
+    'customer.fullName',
+    'customer_name',
+    'user.full_name',
+    'user.name',
+    'user.fullName',
+    'user_name',
+    'client.full_name',
+    'client.name',
+    'customer_profile.full_name',
+    'customer_profile.name',
+    'delivery_address.recipient_name',
+    'delivery_address.name',
+    'address.recipient_name',
+    'address.name',
+    'shipping_address.recipient_name',
+    'shipping_address.name',
+    'recipient.name',
+    'recipient_name',
+    'full_name',
+    'name',
+  ]) || '-'
 }
 
 function getOrderPhone(order) {
-  return (
-    order?.customer?.phone ||
-    order?.customer_phone ||
-    order?.user?.phone ||
-    order?.delivery_address?.phone ||
-    order?.address?.phone ||
-    order?.phone ||
-    order?.recipient_phone ||
-    '-'
-  )
+  return firstValue(order, [
+    'customer.phone',
+    'customer.phone_number',
+    'customer.mobile',
+    'customer_phone',
+    'customer_phone_number',
+    'user.phone',
+    'user.phone_number',
+    'client.phone',
+    'customer_profile.phone',
+    'delivery_address.phone',
+    'delivery_address.phone_number',
+    'address.phone',
+    'address.phone_number',
+    'shipping_address.phone',
+    'recipient.phone',
+    'recipient_phone',
+    'phone',
+    'phone_number',
+    'mobile',
+  ]) || '-'
 }
 
 function getOrderTotal(order) {
@@ -551,13 +609,29 @@ function App() {
   )
 
   const adminFetch = useCallback((path, options = {}) => request(path, adminToken, options), [adminToken, request])
+  const loadOrderDetails = useCallback(
+    async (orders) => {
+      const detailResults = await Promise.allSettled(
+        orders.map(async (order) => {
+          const orderId = getOrderId(order)
+          if (!orderId) return order
+          const payload = await adminFetch(`/api/admin/orders/${encodeURIComponent(orderId)}`)
+          return { ...order, ...unwrapOrder(payload) }
+        }),
+      )
+      return detailResults.map((result, index) => (result.status === 'fulfilled' ? result.value : orders[index]))
+    },
+    [adminFetch],
+  )
   const loadOrders = useCallback(
     async (options = {}) => {
       const payload = await adminFetch('/api/admin/orders')
-      setRecords((current) => ({ ...current, orderStatus: normalizeList(payload) }))
+      const orders = normalizeList(payload)
+      const enrichedOrders = await loadOrderDetails(orders)
+      setRecords((current) => ({ ...current, orderStatus: enrichedOrders }))
       if (!options.silent) setNotice(`${resourceTitle('orderStatus')} ${uiLang === 'ar' ? 'تم تحديثه' : 'updated'}`)
     },
-    [adminFetch, resourceTitle, uiLang],
+    [adminFetch, loadOrderDetails, resourceTitle, uiLang],
   )
   const loadAdminResource = useCallback(
     async (resource, options = {}) => {
@@ -706,19 +780,29 @@ function App() {
 
   async function runOrderAction(order, action) {
     const orderId = getOrderId(order)
+    const config = orderActionConfig[action]
     if (!orderId) return
     setBusy(true)
     setError('')
     try {
-      const payload = await adminFetch(`/api/admin/orders/${encodeURIComponent(orderId)}/${action}`, {
-        method: 'POST',
-      })
+      let payload = null
+      let lastError = null
+      for (const endpoint of config.endpoints) {
+        try {
+          payload = await adminFetch(`/api/admin/orders/${encodeURIComponent(orderId)}/${endpoint}`, {
+            method: 'POST',
+          })
+          break
+        } catch (err) {
+          lastError = err
+        }
+      }
+      if (!payload) throw lastError || new Error('Order action failed')
       const updatedOrder = unwrapOrder(payload)
-      const nextStatus = action === 'confirm' ? 'PREPARING' : 'OUT_FOR_DELIVERY'
       setRecords((current) => ({
         ...current,
         orderStatus: (current.orderStatus || []).map((item) =>
-          getOrderId(item) === orderId ? { ...item, ...updatedOrder, status: updatedOrder?.status || nextStatus } : item,
+          getOrderId(item) === orderId ? { ...item, ...updatedOrder, status: updatedOrder?.status || config.nextStatus } : item,
         ),
       }))
       setNotice(text.orderActionDone)
@@ -901,8 +985,7 @@ function App() {
             busy={busy}
             query={query}
             setQuery={setQuery}
-            onConfirm={(order) => runOrderAction(order, 'confirm')}
-            onSendToDelivery={(order) => runOrderAction(order, 'send-to-delivery')}
+            onOrderAction={runOrderAction}
           />
         ) : (
           <section className="resource-panel">
@@ -1025,7 +1108,7 @@ function renderCell(record, column, lang, text) {
   return formatValue(value, column, lang)
 }
 
-function OrderStatusPanel({ text, orders, loading, busy, query, setQuery, onConfirm, onSendToDelivery }) {
+function OrderStatusPanel({ text, orders, loading, busy, query, setQuery, onOrderAction }) {
   return (
     <section className="resource-panel orders-panel">
       <div className="panel-head">
@@ -1048,8 +1131,7 @@ function OrderStatusPanel({ text, orders, loading, busy, query, setQuery, onConf
               order={order}
               text={text}
               busy={busy}
-              onConfirm={onConfirm}
-              onSendToDelivery={onSendToDelivery}
+              onAction={(action) => onOrderAction(order, action)}
             />
           ))}
       </div>
@@ -1057,12 +1139,11 @@ function OrderStatusPanel({ text, orders, loading, busy, query, setQuery, onConf
   )
 }
 
-function OrderCard({ order, text, busy, onConfirm, onSendToDelivery }) {
+function OrderCard({ order, text, busy, onAction }) {
   const status = getOrderStatus(order)
-  const canConfirm = status === 'PENDING' || status === 'CONFIRMED'
-  const canSendToDelivery = status === 'PREPARING'
   const total = getOrderTotal(order)
   const placedAt = getOrderPlacedAt(order)
+  const actions = getOrderActions(status, text)
 
   return (
     <article className="order-card">
@@ -1094,17 +1175,47 @@ function OrderCard({ order, text, busy, onConfirm, onSendToDelivery }) {
         </div>
       </dl>
       <div className="order-card-actions">
-        <button className="primary-action" type="button" onClick={() => onConfirm(order)} disabled={busy || !canConfirm}>
-          <PackageCheck size={18} />
-          {text.confirmOrder}
-        </button>
-        <button className="ghost-action" type="button" onClick={() => onSendToDelivery(order)} disabled={busy || !canSendToDelivery}>
-          <RefreshCw size={18} />
-          {text.sendToDelivery}
-        </button>
+        {actions.length ? (
+          actions.map((action) => {
+            const Icon = action.icon
+            return (
+              <button
+                className={action.primary ? 'primary-action' : 'ghost-action'}
+                key={action.key}
+                type="button"
+                onClick={() => onAction(action.key)}
+                disabled={busy}
+              >
+                <Icon size={18} />
+                {action.label}
+              </button>
+            )
+          })
+        ) : (
+          <span className="helper-text">{text.noOrderActions}</span>
+        )}
       </div>
     </article>
   )
+}
+
+function getOrderActions(status, text) {
+  if (status === 'PENDING' || status === 'CONFIRMED') {
+    return [
+      { key: 'confirm', label: text.confirmOrder, icon: PackageCheck, primary: true },
+      { key: 'cancel', label: text.cancelOrder, icon: X, primary: false },
+    ]
+  }
+  if (status === 'PREPARING') {
+    return [
+      { key: 'sendToDelivery', label: text.sendToDelivery, icon: RefreshCw, primary: true },
+      { key: 'cancel', label: text.cancelOrder, icon: X, primary: false },
+    ]
+  }
+  if (status === 'OUT_FOR_DELIVERY') {
+    return [{ key: 'markDelivered', label: text.markDelivered, icon: PackageCheck, primary: true }]
+  }
+  return []
 }
 
 function FormDrawer({ resource, values, records, editing, busy, onClose, onSubmit, onChange, text, resourceTitle }) {

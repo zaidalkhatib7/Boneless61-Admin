@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import './App.css'
 
-const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://207.180.254.216'
+const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://boneless.glanzly-service.de/api/'
 const ADMIN_TOKEN_KEY = 'boneless61_admin_token'
 const UI_LANG_KEY = 'boneless61_ui_language'
 
@@ -387,6 +387,12 @@ function unwrapItem(payload, idLabel) {
   return payload?.[idLabel] || payload?.data || payload
 }
 
+function buildApiUrl(path) {
+  const base = DEFAULT_BASE_URL.replace(/\/+$/, '')
+  const normalizedPath = base.endsWith('/api') && path.startsWith('/api/') ? path.slice(4) : path
+  return `${base}${normalizedPath.startsWith('/') ? '' : '/'}${normalizedPath}`
+}
+
 function formatValue(value, column = '', lang = 'en') {
   if (value === null || value === undefined || value === '') return '-'
   if (typeof value === 'boolean') return value ? copy[lang].active : copy[lang].off
@@ -463,7 +469,7 @@ function App() {
 
   const request = useCallback(
     async (path, token, options = {}) => {
-      const response = await fetch(`${DEFAULT_BASE_URL.replace(/\/$/, '')}${path}`, {
+      const response = await fetch(buildApiUrl(path), {
         ...options,
         headers: {
           Accept: 'application/json',

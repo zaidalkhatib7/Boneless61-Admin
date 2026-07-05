@@ -65,10 +65,12 @@ const copy = {
     phone: 'Phone',
     total: 'Total',
     status: 'Status',
+    type: 'Type',
     placedAt: 'Placed at',
     confirmOrder: 'Confirm order',
     sendToDelivery: 'Send to delivery',
     markDelivered: 'Mark delivered',
+    completePickup: 'Complete pickup',
     cancelOrder: 'Cancel order',
     noOrderActions: 'No available actions',
     orderStatusNote: 'Live order queue from the admin API.',
@@ -186,10 +188,12 @@ const copy = {
     phone: 'الهاتف',
     total: 'الإجمالي',
     status: 'الحالة',
+    type: 'النوع',
     placedAt: 'وقت الطلب',
     confirmOrder: 'تأكيد الطلب',
     sendToDelivery: 'إرسال للتوصيل',
     markDelivered: 'تم التوصيل',
+    completePickup: 'إكمال الاستلام',
     cancelOrder: 'إلغاء الطلب',
     noOrderActions: 'لا توجد إجراءات متاحة',
     orderStatusNote: 'قائمة الطلبات المباشرة من واجهة الإدارة.',
@@ -394,15 +398,19 @@ const orderActionConfig = {
     nextStatus: 'PREPARING',
   },
   sendToDelivery: {
-    endpoints: ['send-to-delivery', 'out-for-delivery'],
+    endpoints: ['send-to-delivery'],
     nextStatus: 'OUT_FOR_DELIVERY',
   },
   markDelivered: {
     endpoints: ['delivered', 'deliver', 'mark-delivered', 'complete'],
     nextStatus: 'DELIVERED',
   },
+  completePickup: {
+    endpoints: ['delivered', 'deliver', 'mark-delivered', 'complete'],
+    nextStatus: 'DELIVERED',
+  },
   cancel: {
-    endpoints: ['cancel', 'cancelled'],
+    endpoints: ['cancel'],
     nextStatus: 'CANCELLED',
   },
 }
@@ -454,6 +462,11 @@ function getOrderStatus(order) {
   return String(order?.status || order?.order_status || '').toUpperCase()
 }
 
+function getOrderType(order) {
+  const raw = firstValue(order, ['type', 'order_type', 'fulfillment_type', 'fulfillment', 'delivery_type', 'service_type'])
+  return String(raw || '').toUpperCase()
+}
+
 function getOrderCustomer(order) {
   return firstValue(order, [
     'customer.full_name',
@@ -468,9 +481,18 @@ function getOrderCustomer(order) {
     'client.name',
     'customer_profile.full_name',
     'customer_profile.name',
+    'customer_profile.fullName',
+    'profile.full_name',
+    'profile.name',
+    'contact.name',
+    'contact.full_name',
     'delivery_address.recipient_name',
+    'delivery_address.recipient',
+    'delivery_address.customer_name',
     'delivery_address.name',
     'address.recipient_name',
+    'address.recipient',
+    'address.customer_name',
     'address.name',
     'shipping_address.recipient_name',
     'shipping_address.name',
@@ -492,10 +514,15 @@ function getOrderPhone(order) {
     'user.phone_number',
     'client.phone',
     'customer_profile.phone',
+    'profile.phone',
+    'contact.phone',
+    'contact.phone_number',
     'delivery_address.phone',
     'delivery_address.phone_number',
+    'delivery_address.mobile',
     'address.phone',
     'address.phone_number',
+    'address.mobile',
     'shipping_address.phone',
     'recipient.phone',
     'recipient_phone',
@@ -615,8 +642,16 @@ function App() {
         orders.map(async (order) => {
           const orderId = getOrderId(order)
           if (!orderId) return order
-          const payload = await adminFetch(`/api/admin/orders/${encodeURIComponent(orderId)}`)
-          return { ...order, ...unwrapOrder(payload) }
+          const detailPaths = [`/api/admin/orders/${encodeURIComponent(orderId)}`, `/api/orders/${encodeURIComponent(orderId)}`]
+          for (const path of detailPaths) {
+            try {
+              const payload = await adminFetch(path)
+              return { ...order, ...unwrapOrder(payload) }
+            } catch {
+              // Some backends expose order details only on one of these routes.
+            }
+          }
+          return order
         }),
       )
       return detailResults.map((result, index) => (result.status === 'fulfilled' ? result.value : orders[index]))
@@ -797,7 +832,7 @@ function App() {
           lastError = err
         }
       }
-      if (!payload) throw lastError || new Error('Order action failed')
+      if (!payload) throw new Error(lastError?.message || 'Order action failed')
       const updatedOrder = unwrapOrder(payload)
       setRecords((current) => ({
         ...current,
@@ -1141,9 +1176,10 @@ function OrderStatusPanel({ text, orders, loading, busy, query, setQuery, onOrde
 
 function OrderCard({ order, text, busy, onAction }) {
   const status = getOrderStatus(order)
+  const type = getOrderType(order)
   const total = getOrderTotal(order)
   const placedAt = getOrderPlacedAt(order)
-  const actions = getOrderActions(status, text)
+  const actions = getOrderActions(status, type, text)
 
   return (
     <article className="order-card">
@@ -1152,11 +1188,15 @@ function OrderCard({ order, text, busy, onAction }) {
           <p className="eyebrow">{text.orderStatusNote}</p>
           <h3>{getOrderNumber(order)}</h3>
         </div>
-        <span className={`status order-status ${status === 'PENDING' ? 'pending' : status ? 'on' : 'off'}`}>
+        <span className={`status order-status ${orderStatusClass(status)}`}>
           {status || '-'}
         </span>
       </div>
       <dl className="order-meta">
+        <div>
+          <dt>{text.type}</dt>
+          <dd>{type || '-'}</dd>
+        </div>
         <div>
           <dt>{text.customer}</dt>
           <dd>{getOrderCustomer(order)}</dd>
@@ -1199,7 +1239,8 @@ function OrderCard({ order, text, busy, onAction }) {
   )
 }
 
-function getOrderActions(status, text) {
+function getOrderActions(status, type, text) {
+  const isPickup = type === 'PICKUP'
   if (status === 'PENDING' || status === 'CONFIRMED') {
     return [
       { key: 'confirm', label: text.confirmOrder, icon: PackageCheck, primary: true },
@@ -1208,7 +1249,9 @@ function getOrderActions(status, text) {
   }
   if (status === 'PREPARING') {
     return [
-      { key: 'sendToDelivery', label: text.sendToDelivery, icon: RefreshCw, primary: true },
+      isPickup
+        ? { key: 'completePickup', label: text.completePickup, icon: PackageCheck, primary: true }
+        : { key: 'sendToDelivery', label: text.sendToDelivery, icon: RefreshCw, primary: true },
       { key: 'cancel', label: text.cancelOrder, icon: X, primary: false },
     ]
   }
@@ -1216,6 +1259,13 @@ function getOrderActions(status, text) {
     return [{ key: 'markDelivered', label: text.markDelivered, icon: PackageCheck, primary: true }]
   }
   return []
+}
+
+function orderStatusClass(status) {
+  if (status === 'PENDING') return 'pending'
+  if (status === 'CANCELLED') return 'danger'
+  if (status === 'DELIVERED') return 'done'
+  return status ? 'on' : 'off'
 }
 
 function FormDrawer({ resource, values, records, editing, busy, onClose, onSubmit, onChange, text, resourceTitle }) {

@@ -61,6 +61,29 @@ const copy = {
     orderActionDone: 'Order status updated',
     ordersLoadFailed: 'Orders could not be loaded from the admin API.',
     noOrders: 'No orders found.',
+    orderQueue: 'Order queue',
+    orderCount: 'orders',
+    missingFromApi: 'Not provided by API',
+    filters: {
+      active: 'Active',
+      delivery: 'Delivery',
+      pickup: 'Pickup',
+      completed: 'Completed',
+      cancelled: 'Cancelled',
+      all: 'All',
+    },
+    statuses: {
+      PENDING: 'Pending',
+      CONFIRMED: 'Confirmed',
+      PREPARING: 'Preparing',
+      OUT_FOR_DELIVERY: 'Out for delivery',
+      DELIVERED: 'Delivered',
+      CANCELLED: 'Cancelled',
+    },
+    types: {
+      DELIVERY: 'Delivery',
+      PICKUP: 'Pickup',
+    },
     customer: 'Customer',
     phone: 'Phone',
     total: 'Total',
@@ -83,6 +106,15 @@ const copy = {
     statsActiveOffers: 'Active Offers',
     statsMenuOptions: 'Menu Options',
     langButton: 'العربية',
+    mobileNav: {
+      branches: 'Branches',
+      categories: 'Cats',
+      items: 'Items',
+      optionGroups: 'Groups',
+      options: 'Options',
+      offers: 'Offers',
+      orderStatus: 'Orders',
+    },
     resources: {
       branches: ['Branches', 'Pickup hubs and delivery locations'],
       categories: ['Menu Categories', 'Burger, boneless, sides and other app tabs'],
@@ -184,6 +216,29 @@ const copy = {
     orderActionDone: 'تم تحديث حالة الطلب',
     ordersLoadFailed: 'تعذر تحميل الطلبات من واجهة الإدارة.',
     noOrders: 'لا توجد طلبات.',
+    orderQueue: 'قائمة الطلبات',
+    orderCount: 'طلبات',
+    missingFromApi: 'غير متوفر من الواجهة',
+    filters: {
+      active: 'النشطة',
+      delivery: 'توصيل',
+      pickup: 'استلام',
+      completed: 'مكتملة',
+      cancelled: 'ملغاة',
+      all: 'الكل',
+    },
+    statuses: {
+      PENDING: 'بانتظار التأكيد',
+      CONFIRMED: 'مؤكد',
+      PREPARING: 'قيد التحضير',
+      OUT_FOR_DELIVERY: 'خارج للتوصيل',
+      DELIVERED: 'مكتمل',
+      CANCELLED: 'ملغي',
+    },
+    types: {
+      DELIVERY: 'توصيل',
+      PICKUP: 'استلام',
+    },
     customer: 'العميل',
     phone: 'الهاتف',
     total: 'الإجمالي',
@@ -206,6 +261,15 @@ const copy = {
     statsActiveOffers: 'العروض النشطة',
     statsMenuOptions: 'خيارات القائمة',
     langButton: 'English',
+    mobileNav: {
+      branches: 'الفروع',
+      categories: 'تصنيفات',
+      items: 'العناصر',
+      optionGroups: 'مجموعات',
+      options: 'خيارات',
+      offers: 'عروض',
+      orderStatus: 'طلبات',
+    },
     resources: {
       branches: ['الفروع', 'نقاط الاستلام ومواقع التوصيل'],
       categories: ['تصنيفات القائمة', 'تصنيفات التطبيق مثل البرغر والبونلس والجوانب'],
@@ -540,6 +604,63 @@ function getOrderPlacedAt(order) {
   return order?.created_at || order?.placed_at || order?.ordered_at || order?.updated_at
 }
 
+function formatOrderStatus(status, text) {
+  return text.statuses?.[status] || status || '-'
+}
+
+function formatOrderType(type, text) {
+  return text.types?.[type] || type || '-'
+}
+
+function formatOrderDate(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+}
+
+function isMissingApiValue(value) {
+  return value === '-' || value === null || value === undefined || value === ''
+}
+
+function getOrderFilterOptions(text) {
+  return [
+    { key: 'active', label: text.filters.active },
+    { key: 'delivery', label: text.filters.delivery },
+    { key: 'pickup', label: text.filters.pickup },
+    { key: 'completed', label: text.filters.completed },
+    { key: 'cancelled', label: text.filters.cancelled },
+    { key: 'all', label: text.filters.all },
+  ]
+}
+
+function matchesOrderFilter(order, filter) {
+  const status = getOrderStatus(order)
+  const type = getOrderType(order)
+  if (filter === 'delivery') return type === 'DELIVERY'
+  if (filter === 'pickup') return type === 'PICKUP'
+  if (filter === 'completed') return status === 'DELIVERED'
+  if (filter === 'cancelled') return status === 'CANCELLED'
+  if (filter === 'all') return true
+  return ['PENDING', 'CONFIRMED', 'PREPARING', 'OUT_FOR_DELIVERY'].includes(status)
+}
+
+function getOrderSteps(type) {
+  return type === 'PICKUP'
+    ? ['PENDING', 'PREPARING', 'DELIVERED']
+    : ['PENDING', 'PREPARING', 'OUT_FOR_DELIVERY', 'DELIVERED']
+}
+
+function isStepReached(currentStatus, step, type) {
+  if (currentStatus === 'CANCELLED') return false
+  const normalized = currentStatus === 'CONFIRMED' ? 'PENDING' : currentStatus
+  const steps = getOrderSteps(type)
+  return steps.indexOf(normalized) >= steps.indexOf(step)
+}
+
 function formatValue(value, column = '', lang = 'en') {
   if (value === null || value === undefined || value === '') return '-'
   if (typeof value === 'boolean') return value ? copy[lang].active : copy[lang].off
@@ -589,6 +710,7 @@ function App() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
+  const [orderFilter, setOrderFilter] = useState('active')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -711,6 +833,21 @@ function App() {
     const timer = window.setTimeout(loadAll, 0)
     return () => window.clearTimeout(timer)
   }, [loadAll])
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key !== 'Escape') return
+      setDrawerOpen(false)
+      setFormOpen(false)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    document.body.classList.toggle('drawer-active', drawerOpen || formOpen)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      document.body.classList.remove('drawer-active')
+    }
+  }, [drawerOpen, formOpen])
 
   async function login(event) {
     event.preventDefault()
@@ -856,6 +993,11 @@ function App() {
     return list.filter((item) => JSON.stringify(item).toLowerCase().includes(needle))
   }, [activeConfig.key, query, records])
 
+  const visibleOrders = useMemo(
+    () => activeRecords.filter((order) => matchesOrderFilter(order, orderFilter)),
+    [activeRecords, orderFilter],
+  )
+
   const stats = useMemo(
     () => [
       { label: text.statsBranches, value: records.branches?.length || 0, icon: Building2 },
@@ -989,7 +1131,7 @@ function App() {
         </header>
 
         {(error || notice) && (
-          <div className={`alert ${error ? 'error' : 'success'}`}>
+          <div className={`alert app-alert ${error ? 'error' : 'success'}`} role={error ? 'alert' : 'status'}>
             {error || notice}
             <button type="button" aria-label="Dismiss message" onClick={() => (error ? setError('') : setNotice(''))}>
               <X size={16} />
@@ -1015,11 +1157,14 @@ function App() {
         {isActionPage ? (
           <OrderStatusPanel
             text={text}
-            orders={activeRecords}
+            orders={visibleOrders}
+            totalOrders={activeRecords.length}
             loading={loading}
             busy={busy}
             query={query}
             setQuery={setQuery}
+            orderFilter={orderFilter}
+            setOrderFilter={setOrderFilter}
             onOrderAction={runOrderAction}
           />
         ) : (
@@ -1061,6 +1206,17 @@ function App() {
           onChange={(name, value) => setFormValues((current) => ({ ...current, [name]: value }))}
         />
       )}
+      <BottomNav
+        items={adminNavItems}
+        activeKey={activeKey}
+        text={text}
+        resourceTitle={resourceTitle}
+        onSelect={(key) => {
+          setActiveKey(key)
+          setQuery('')
+          setDrawerOpen(false)
+        }}
+      />
     </main>
   )
 }
@@ -1069,24 +1225,51 @@ function NavGroup({ title, items, activeKey, onSelect, resourceTitle }) {
   return (
     <div className="nav-section">
       <p className="eyebrow">{title}</p>
-      <nav className="nav-list">
+      <nav className="nav-list" aria-label={title}>
         {items.map((item) => {
           const Icon = item.icon
+          const title = resourceTitle(item.key)
           return (
             <button
               key={item.key}
               className={item.key === activeKey ? 'active' : ''}
               type="button"
+              aria-current={item.key === activeKey ? 'page' : undefined}
               onClick={() => onSelect(item.key)}
             >
               <Icon size={18} />
-              <span>{resourceTitle(item.key)}</span>
+              <span>{title}</span>
               <ChevronRight size={16} />
             </button>
           )
         })}
       </nav>
     </div>
+  )
+}
+
+function BottomNav({ items, activeKey, onSelect, resourceTitle, text }) {
+  return (
+    <nav className="bottom-nav" aria-label="Primary">
+      {items.map((item) => {
+        const Icon = item.icon
+        const title = resourceTitle(item.key)
+        const label = text.mobileNav?.[item.key] || title
+        return (
+          <button
+            key={item.key}
+            className={item.key === activeKey ? 'active' : ''}
+            type="button"
+            aria-label={title}
+            aria-current={item.key === activeKey ? 'page' : undefined}
+            onClick={() => onSelect(item.key)}
+          >
+            <Icon size={18} />
+            <span>{label}</span>
+          </button>
+        )
+      })}
+    </nav>
   )
 }
 
@@ -1114,10 +1297,10 @@ function ResourceTable({ columns, records, loading, readOnly, onEdit, onDelete, 
               ))}
               {!readOnly && (
                 <td className="row-actions">
-                  <button className="icon-button" type="button" onClick={() => onEdit(record)} title="Edit">
+                  <button className="icon-button" type="button" onClick={() => onEdit(record)} title={text.editItem} aria-label={text.editItem}>
                     <Edit3 size={16} />
                   </button>
-                  <button className="icon-button danger" type="button" onClick={() => onDelete(record)} title="Delete">
+                  <button className="icon-button danger" type="button" onClick={() => onDelete(record)} title={text.deleteConfirm} aria-label={text.deleteConfirm}>
                     <Trash2 size={16} />
                   </button>
                 </td>
@@ -1143,18 +1326,34 @@ function renderCell(record, column, lang, text) {
   return formatValue(value, column, lang)
 }
 
-function OrderStatusPanel({ text, orders, loading, busy, query, setQuery, onOrderAction }) {
+function OrderStatusPanel({ text, orders, totalOrders, loading, busy, query, setQuery, orderFilter, setOrderFilter, onOrderAction }) {
   return (
     <section className="resource-panel orders-panel">
       <div className="panel-head">
         <div>
           <p className="eyebrow">{text.resources.orderStatus[1]}</p>
-          <h2>{text.resources.orderStatus[0]}</h2>
+          <h2>{text.orderQueue}</h2>
+          <p className="panel-subtitle">
+            {orders.length} / {totalOrders} {text.orderCount}
+          </p>
         </div>
         <label className="search-box">
           <Search size={17} />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={text.search} />
         </label>
+      </div>
+      <div className="filter-bar" role="list" aria-label={text.status}>
+        {getOrderFilterOptions(text).map((filter) => (
+          <button
+            key={filter.key}
+            className={filter.key === orderFilter ? 'active' : ''}
+            type="button"
+            role="listitem"
+            onClick={() => setOrderFilter(filter.key)}
+          >
+            {filter.label}
+          </button>
+        ))}
       </div>
       <div className="orders-list">
         {loading && <div className="empty-state">{text.loading}</div>}
@@ -1180,6 +1379,9 @@ function OrderCard({ order, text, busy, onAction }) {
   const total = getOrderTotal(order)
   const placedAt = getOrderPlacedAt(order)
   const actions = getOrderActions(status, type, text)
+  const customer = getOrderCustomer(order)
+  const phone = getOrderPhone(order)
+  const steps = getOrderSteps(type)
 
   return (
     <article className="order-card">
@@ -1188,22 +1390,33 @@ function OrderCard({ order, text, busy, onAction }) {
           <p className="eyebrow">{text.orderStatusNote}</p>
           <h3>{getOrderNumber(order)}</h3>
         </div>
-        <span className={`status order-status ${orderStatusClass(status)}`}>
-          {status || '-'}
-        </span>
+        <div className="order-badges">
+          <span className="status type-status">{formatOrderType(type, text)}</span>
+          <span className={`status order-status ${orderStatusClass(status)}`}>
+            {formatOrderStatus(status, text)}
+          </span>
+        </div>
       </div>
+      <ol className="order-flow" aria-label={text.status}>
+        {steps.map((step) => (
+          <li key={step} className={isStepReached(status, step, type) ? 'done' : ''}>
+            <span />
+            {formatOrderStatus(step, text)}
+          </li>
+        ))}
+      </ol>
       <dl className="order-meta">
         <div>
           <dt>{text.type}</dt>
-          <dd>{type || '-'}</dd>
+          <dd>{formatOrderType(type, text)}</dd>
         </div>
-        <div>
+        <div className={isMissingApiValue(customer) ? 'missing' : ''}>
           <dt>{text.customer}</dt>
-          <dd>{getOrderCustomer(order)}</dd>
+          <dd>{isMissingApiValue(customer) ? text.missingFromApi : customer}</dd>
         </div>
-        <div>
+        <div className={isMissingApiValue(phone) ? 'missing' : ''}>
           <dt>{text.phone}</dt>
-          <dd>{getOrderPhone(order)}</dd>
+          <dd>{isMissingApiValue(phone) ? text.missingFromApi : phone}</dd>
         </div>
         <div>
           <dt>{text.total}</dt>
@@ -1211,7 +1424,7 @@ function OrderCard({ order, text, busy, onAction }) {
         </div>
         <div>
           <dt>{text.placedAt}</dt>
-          <dd>{placedAt ? new Date(placedAt).toLocaleString() : '-'}</dd>
+          <dd>{formatOrderDate(placedAt)}</dd>
         </div>
       </dl>
       <div className="order-card-actions">
@@ -1271,11 +1484,11 @@ function orderStatusClass(status) {
 function FormDrawer({ resource, values, records, editing, busy, onClose, onSubmit, onChange, text, resourceTitle }) {
   return (
     <div className="drawer-backdrop">
-      <aside className="form-drawer">
+      <aside className="form-drawer" role="dialog" aria-modal="true" aria-labelledby="record-form-title">
         <div className="drawer-head">
           <div>
             <p className="eyebrow">{editing ? text.editItem : text.addItem}</p>
-            <h2>{resourceTitle(resource.key)}</h2>
+            <h2 id="record-form-title">{resourceTitle(resource.key)}</h2>
           </div>
           <button className="icon-button" type="button" aria-label="Close form" onClick={onClose}>
             <X size={18} />
